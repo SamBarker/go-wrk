@@ -8,9 +8,9 @@ import (
 
 	"fmt"
 
+	"github.com/SamBarker/go-wrk/util"
 	"golang.org/x/net/http2"
 	"time"
-	"github.com/tsliwowicz/go-wrk/util"
 )
 
 func client(disableCompression bool, disableKeepAlive bool, timeoutms int, allowRedirects bool, clientCert, clientKey, caCert string, usehttp2 bool) (*http.Client, error) {

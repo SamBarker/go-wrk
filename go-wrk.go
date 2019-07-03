@@ -10,11 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tsliwowicz/go-wrk/loader"
-	"github.com/tsliwowicz/go-wrk/util"
+	"github.com/SamBarker/go-wrk/loader"
+	"github.com/SamBarker/go-wrk/util"
+	"github.com/zoidbergwill/hdrhistogram"
 )
 
-const APP_VERSION = "0.1"
+const APP_VERSION = "0.2"
 
 //default that can be overridden from the command line
 var versionFlag bool = false
@@ -27,6 +28,8 @@ var host string
 var headerStr string
 var header map[string]string
 var statsAggregator chan *loader.RequesterStats
+var latencyHistogram *hdrhistogram.Histogram
+var sizeHistogram *hdrhistogram.Histogram
 var timeoutms int
 var allowRedirectsFlag bool = false
 var disableCompression bool
@@ -73,6 +76,8 @@ func main() {
 
 	statsAggregator = make(chan *loader.RequesterStats, goroutines)
 	sigChan := make(chan os.Signal, 1)
+	latencyHistogram = hdrhistogram.New(0, 1000000000000, 2)
+	sizeHistogram = hdrhistogram.New(0, 1000000, 2)
 
 	signal.Notify(sigChan, os.Interrupt)
 
@@ -122,8 +127,7 @@ func main() {
 		}
 		reqBody = string(data)
 	}
-
-	loadGen := loader.NewLoadCfg(duration, goroutines, testUrl, reqBody, method, host, header, statsAggregator, timeoutms,
+	loadGen := loader.NewLoadCfg(duration, goroutines, testUrl, reqBody, method, host, header, statsAggregator, latencyHistogram, sizeHistogram, timeoutms,
 		allowRedirectsFlag, disableCompression, disableKeepAlive, clientCert, clientKey, caCert, http2)
 
 	for i := 0; i < goroutines; i++ {
@@ -164,5 +168,12 @@ func main() {
 	fmt.Printf("Fastest Request:\t%v\n", aggStats.MinRequestTime)
 	fmt.Printf("Slowest Request:\t%v\n", aggStats.MaxRequestTime)
 	fmt.Printf("Number of Errors:\t%v\n", aggStats.NumErrs)
+	fmt.Printf("\n-------------------\nHdr Results\n-------------------\n")
+	fmt.Printf("%v requests, mean latency: %v mean size: %v\n", latencyHistogram.TotalCount(), latencyHistogram.Mean(), util.ByteSize{sizeHistogram.Mean()})
+	fmt.Printf("95%% latency: %v size: %v\n", time.Duration(latencyHistogram.ValueAtQuantile(95.0)), util.ByteSize{float64(sizeHistogram.ValueAtQuantile(95.0))})
+	fmt.Printf("99%% latency: %v size: %v\n", time.Duration(latencyHistogram.ValueAtQuantile(99.0)), util.ByteSize{float64(sizeHistogram.ValueAtQuantile(99.0))})
+	fmt.Printf("99.9%% latency: %v size: %v\n", time.Duration(latencyHistogram.ValueAtQuantile(99.9)), util.ByteSize{float64(sizeHistogram.ValueAtQuantile(99.9))})
+	fmt.Printf("Fastest Request:\t%v\n", time.Duration(latencyHistogram.Min()))
+	fmt.Printf("Slowest Request:\t%v\n", time.Duration(latencyHistogram.Max()))
 
 }

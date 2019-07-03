@@ -3,6 +3,7 @@ package loader
 import (
 	"bytes"
 	"fmt"
+	"github.com/zoidbergwill/hdrhistogram"
 	"io"
 	"io/ioutil"
 	"log"
@@ -12,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/tsliwowicz/go-wrk/util"
+	"github.com/SamBarker/go-wrk/util"
 )
 
 const (
@@ -28,6 +29,8 @@ type LoadCfg struct {
 	host               string
 	header             map[string]string
 	statsAggregator    chan *RequesterStats
+	latnecyHistogram   *hdrhistogram.Histogram
+	sizeHistogram      *hdrhistogram.Histogram
 	timeoutms          int
 	allowRedirects     bool
 	disableCompression bool
@@ -57,6 +60,8 @@ func NewLoadCfg(duration int, //seconds
 	host string,
 	header map[string]string,
 	statsAggregator chan *RequesterStats,
+	latencyHistogram *hdrhistogram.Histogram,
+	sizeHistogram *hdrhistogram.Histogram,
 	timeoutms int,
 	allowRedirects bool,
 	disableCompression bool,
@@ -65,7 +70,7 @@ func NewLoadCfg(duration int, //seconds
 	clientKey string,
 	caCert string,
 	http2 bool) (rt *LoadCfg) {
-	rt = &LoadCfg{duration, goroutines, testUrl, reqBody, method, host, header, statsAggregator, timeoutms,
+	rt = &LoadCfg{duration, goroutines, testUrl, reqBody, method, host, header, statsAggregator, latencyHistogram, sizeHistogram, timeoutms,
 		allowRedirects, disableCompression, disableKeepAlive, 0, clientCert, clientKey, caCert, http2}
 	return
 }
@@ -184,6 +189,11 @@ func (cfg *LoadCfg) RunSingleLoadSession() {
 			stats.MaxRequestTime = util.MaxDuration(reqDur, stats.MaxRequestTime)
 			stats.MinRequestTime = util.MinDuration(reqDur, stats.MinRequestTime)
 			stats.NumRequests++
+
+			reqNanos := reqDur.Nanoseconds()
+			cfg.latnecyHistogram.RecordValue(reqNanos)
+			cfg.sizeHistogram.RecordValue(int64(respSize))
+
 		} else {
 			stats.NumErrs++
 		}
